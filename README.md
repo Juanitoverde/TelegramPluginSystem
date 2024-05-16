@@ -1,5 +1,3 @@
-
-######################
 # ...YOU , PLUGINS, AND TELEGRAM...                          
 Currently Under Development Still, It is semi-functional. All features and abilities are not implimented, but can be a good base to start your own.
 Commands: /start , /help
