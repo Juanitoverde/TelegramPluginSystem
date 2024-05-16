@@ -1,17 +1,15 @@
-w######################
+
 ######################
 # ...YOU , PLUGINS, AND TELEGRAM...                          
-######################
-######################
-# Currently Under Development Still, It is semi-functional. All features and abilities are not implimented, but can be a good base to start your own.
-# Commands: /start , /help
-######################
+Currently Under Development Still, It is semi-functional. All features and abilities are not implimented, but can be a good base to start your own.
+Commands: /start , /help
+
 # Example Plugins Being Worked On...
-# a) User System (users.py)
-# b) Wallet System (wallet.py)
-# c) Payment Processor Integration (payment_processor.py)
-# d) Store System (store.py)
-######################
+ a) User System (users.py)
+ b) Wallet System (wallet.py)
+ c) Payment Processor Integration (payment_processor.py)
+ d) Store System (store.py)
+
 
 
 # TelegramPluginSystem
