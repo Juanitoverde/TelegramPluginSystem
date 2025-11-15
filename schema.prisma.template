@@ -1,0 +1,307 @@
+// Prisma Schema for Telegram SMS/Voice Bot
+// Save as prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MODELS
+// ============================================
+
+model User {
+  id                    Int       @id @default(autoincrement())
+  telegramId            BigInt    @unique
+  username              String?
+  firstName             String?
+  lastName              String?
+  phoneNumber           String?
+  email                 String?
+  balance               Decimal   @default(0) @db.Decimal(10, 2)
+  role                  String    @default("user") // user, admin
+  status                String    @default("active") // active, banned, suspended
+  language              String    @default("en")
+  notificationsEnabled  Boolean   @default(true)
+  totalSpent            Decimal   @default(0) @db.Decimal(10, 2)
+  smsSent               Int       @default(0)
+  callsMade             Int       @default(0)
+  registrationDate      DateTime  @default(now())
+  lastActive            DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  transactions          Transaction[]
+  payments              Payment[]
+  smsHistory            SmsHistory[]
+  callHistory           CallHistory[]
+  adminLogs             AdminLog[]   @relation("AdminActions")
+  affectedByAdmin       AdminLog[]   @relation("TargetUser")
+
+  @@index([telegramId])
+  @@index([status])
+  @@index([role])
+  @@map("users")
+}
+
+// ============================================
+// TRANSACTION MODELS
+// ============================================
+
+model Transaction {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  telegramId     BigInt
+  type           String    // deposit, sms, call, refund, admin_adjustment, bonus
+  amount         Decimal   @db.Decimal(10, 2)
+  balanceBefore  Decimal?  @db.Decimal(10, 2)
+  balanceAfter   Decimal?  @db.Decimal(10, 2)
+  description    String?   @db.Text
+  metadata       Json?     // Additional data (phone, duration, provider, etc.)
+  status         String    @default("completed") // pending, completed, failed, refunded
+  createdAt      DateTime  @default(now())
+
+  // Relations
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([telegramId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+// ============================================
+// PAYMENT MODELS
+// ============================================
+
+model Payment {
+  id                String    @id @default(uuid())
+  userId            Int
+  telegramId        BigInt
+  paymentId         String    @unique
+  paymentMethod     String    // cryptocloud, telegram_stars, telegram_card
+  amount            Decimal   @db.Decimal(10, 2)
+  credits           Int
+  currency          String    @default("USD")
+  status            String    @default("pending") // pending, completed, failed, expired, cancelled
+  paymentUrl        String?   @db.Text
+  paymentAddress    String?   // For crypto payments
+  providerData      Json?     // Provider-specific data
+  completedAt       DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([telegramId])
+  @@index([paymentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// ============================================
+// SMS HISTORY MODELS
+// ============================================
+
+model SmsHistory {
+  id                  Int       @id @default(autoincrement())
+  userId              Int
+  telegramId          BigInt
+  toNumber            String
+  message             String    @db.Text
+  messageLength       Int?
+  cost                Decimal   @db.Decimal(10, 2)
+  provider            String    // twilio, onvoy, google_voice
+  providerMessageId   String?
+  status              String    @default("pending") // pending, sent, delivered, failed, undelivered
+  errorMessage        String?   @db.Text
+  errorCode           String?
+  countryCode         String?
+  sentAt              DateTime  @default(now())
+  deliveredAt         DateTime?
+  failedAt            DateTime?
+  createdAt           DateTime  @default(now())
+
+  // Relations
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([telegramId])
+  @@index([status])
+  @@index([provider])
+  @@index([sentAt])
+  @@map("sms_history")
+}
+
+// ============================================
+// CALL HISTORY MODELS
+// ============================================
+
+model CallHistory {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  telegramId        BigInt
+  toNumber          String
+  duration          Int       @default(0) // Duration in seconds
+  cost              Decimal   @default(0) @db.Decimal(10, 2)
+  provider          String    // twilio, onvoy, google_voice
+  providerCallId    String?
+  status            String    @default("initiated") // initiated, ringing, in-progress, completed, failed, no-answer, busy, cancelled
+  recordingUrl      String?   @db.Text
+  recordingDuration Int?      // Recording duration if different from call
+  errorMessage      String?   @db.Text
+  errorCode         String?
+  countryCode       String?
+  startedAt         DateTime  @default(now())
+  answeredAt        DateTime?
+  endedAt           DateTime?
+  createdAt         DateTime  @default(now())
+
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([telegramId])
+  @@index([status])
+  @@index([provider])
+  @@index([startedAt])
+  @@map("call_history")
+}
+
+// ============================================
+// SYSTEM SETTINGS MODELS
+// ============================================
+
+model SystemSettings {
+  id          Int       @id @default(autoincrement())
+  key         String    @unique
+  value       String    @db.Text
+  dataType    String    @default("string") // string, number, boolean, json
+  description String?   @db.Text
+  category    String?   // pricing, features, limits, etc.
+  updatedBy   Int?
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@index([key])
+  @@index([category])
+  @@map("system_settings")
+}
+
+// ============================================
+// ADMIN LOG MODELS
+// ============================================
+
+model AdminLog {
+  id            Int       @id @default(autoincrement())
+  adminId       Int
+  action        String    // add_credits, remove_credits, ban_user, unban_user, broadcast, etc.
+  targetUserId  Int?
+  details       Json?     // Additional details about the action
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+
+  // Relations
+  admin         User      @relation("AdminActions", fields: [adminId], references: [id], onDelete: Cascade)
+  targetUser    User?     @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("admin_logs")
+}
+
+// ============================================
+// SCHEDULED MESSAGES (Future Feature)
+// ============================================
+
+model ScheduledMessage {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  telegramId        BigInt
+  messageType       String    // sms, call
+  toNumber          String
+  message           String?   @db.Text
+  scheduledFor      DateTime
+  status            String    @default("pending") // pending, sent, failed, cancelled
+  executedAt        DateTime?
+  errorMessage      String?   @db.Text
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("scheduled_messages")
+}
+
+// ============================================
+// REFERRAL SYSTEM (Future Feature)
+// ============================================
+
+model Referral {
+  id                Int       @id @default(autoincrement())
+  referrerId        Int
+  referredUserId    Int
+  referralCode      String    @unique
+  status            String    @default("pending") // pending, completed, paid
+  bonusAwarded      Decimal?  @db.Decimal(10, 2)
+  awardedAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([referrerId])
+  @@index([referredUserId])
+  @@index([referralCode])
+  @@map("referrals")
+}
+
+// ============================================
+// MESSAGE TEMPLATES (Future Feature)
+// ============================================
+
+model MessageTemplate {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  name        String
+  content     String    @db.Text
+  isGlobal    Boolean   @default(false) // Admin templates available to all
+  usageCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([isGlobal])
+  @@map("message_templates")
+}
+
+// ============================================
+// PROVIDER STATUS (System Health)
+// ============================================
+
+model ProviderStatus {
+  id                Int       @id @default(autoincrement())
+  provider          String    @unique // twilio, onvoy, google_voice, cryptocloud, telegram
+  status            String    @default("active") // active, degraded, down
+  lastChecked       DateTime  @default(now())
+  responseTime      Int?      // Response time in ms
+  errorRate         Decimal?  @db.Decimal(5, 2) // Percentage
+  lastError         String?   @db.Text
+  lastErrorAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  @@index([provider])
+  @@index([status])
+  @@map("provider_status")
+}
